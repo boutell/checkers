@@ -44,9 +44,9 @@
     <script>
       (function() {
         const rows = 8, cols = 8;
-        const interval = 5;
+        const interval = 100;
         const board = [];
-        let player = 'black';
+        let player = 'red';
         let movesWithoutChange = 0;
         reset();
         function nextTurn() {
@@ -89,9 +89,9 @@
             for (let x = 0; (x < cols); x++) {
               board[x][y] = null;
               if ((x + y) % 2) {
-                if (y < 2) {
+                if (y < 3) {
                   board[x][y] = 'black';
-                } else if (y >= (rows - 2)) {
+                } else if (y >= (rows - 3)) {
                   board[x][y] = 'red';
                 }
               }
@@ -126,21 +126,23 @@
           const moves = [];
           for (piece of pieces) {
             if (player === 'red') {
-              test(-1, -1);
-              test(1, -1);
+              test([[-1, -1], [1, -1]]);
             } else {
-              test(-1, 1);
-              test(1, 1);
+              test([[-1, 1], [1, 1]]);
             }
-            function test(dx, dy) {
-              const value = probe(dx, dy);
-              if (value === false) {
-                return;
-              } else if (value === null) {
-                moves.push({ piece, x: piece.x + dx, y: piece.y + dy });
-              } else if (value !== player) {
-                if (probe(dx * 2, dy * 2) === null) {
-                  moves.push({ piece, x: piece.x + dx * 2, y: piece.y + dy * 2, jumped: { x: piece.x + dx, y: piece.y + dy } });
+            function test(deltas) {
+              for (delta of deltas) {
+                const dx = delta[0];
+                const dy = delta[1];
+                const value = probe(dx, dy);
+                if (value === false) {
+                  // out of bounds
+                } else if (value === null) {
+                  moves.push({ piece, x: piece.x + dx, y: piece.y + dy });
+                } else if (value !== player) {
+                  if (probe(dx * 2, dy * 2) === null) {
+                    moves.push({ piece, x: piece.x + dx * 2, y: piece.y + dy * 2, jumped: { x: piece.x + dx, y: piece.y + dy } });
+                  }
                 }
               }
             }
