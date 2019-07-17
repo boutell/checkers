@@ -44,17 +44,23 @@
     <script>
       (function() {
         const rows = 8, cols = 8;
-        const interval = 200;
+        const interval = 5;
         const board = [];
         let player = 'black';
-        initBoard();
-        setTimeout(nextTurn, interval);
+        let movesWithoutChange = 0;
+        reset();
         function nextTurn() {
           const moves = validMoves(player); 
           if (moves.length) {
+            movesWithoutChange = 0;
             move = moves[Math.floor(Math.random() * moves.length)];
             board[move.piece.x][move.piece.y] = null;
+            if (move.jumped) {
+              board[move.jumped.x][move.jumped.y] = null;
+            }
             board[move.x][move.y] = player;
+          } else {
+            movesWithoutChange++;
           }
           updateBoard();
           if (player === 'red') {
@@ -62,6 +68,14 @@
           } else {
             player = 'red';
           }
+          if (movesWithoutChange === 2) {
+            setTimeout(reset, interval * 70);
+          } else {
+            setTimeout(nextTurn, interval);
+          }
+        }
+        function reset() {
+          initBoard();
           setTimeout(nextTurn, interval);
         }
         function initBoard() {
@@ -112,23 +126,37 @@
           const moves = [];
           for (piece of pieces) {
             if (player === 'red') {
-              if ((piece.x > 0) && (piece.y > 0) && (!board[piece.x - 1][piece.y - 1])) {
-                moves.push({ piece, x: piece.x - 1, y: piece.y - 1 });
-              }
-              if ((piece.x < (cols - 1)) && (piece.y > 0) && (!board[piece.x + 1][piece.y - 1])) {
-                moves.push({ piece, x: piece.x + 1, y: piece.y - 1 });
-              }
+              test(-1, -1);
+              test(1, -1);
             } else {
-              if ((piece.y < (rows - 1)) && (piece.x > 0) && (!board[piece.x - 1][piece.y + 1])) {
-                moves.push({ piece, x: piece.x - 1, y: piece.y + 1 });
+              test(-1, 1);
+              test(1, 1);
+            }
+            function test(dx, dy) {
+              const value = probe(dx, dy);
+              if (value === false) {
+                return;
+              } else if (value === null) {
+                moves.push({ piece, x: piece.x + dx, y: piece.y + dy });
+              } else if (value !== player) {
+                if (probe(dx * 2, dy * 2) === null) {
+                  moves.push({ piece, x: piece.x + dx * 2, y: piece.y + dy * 2, jumped: { x: piece.x + dx, y: piece.y + dy } });
+                }
               }
-              if ((piece.y < (rows - 1)) && (piece.x < (cols - 1)) && (!board[piece.x + 1][piece.y + 1])) {
-                moves.push({ piece, x: piece.x + 1, y: piece.y + 1 });
+            }
+            function probe(dx, dy) {
+              if ((piece.x + dx >= 0) && (piece.y + dy >= 0) && (piece.x + dx < cols) && (piece.y + dy < rows)) {
+                return board[piece.x + dx][piece.y + dy];
+              } else {
+                return false;
               }
             }
           }
-          // TODO jumping, multi-step moves due to jumping
-          // TODO kings
+          // If you can jump, you must jump
+          if (moves.find(move => move.jumped)) {
+            return moves.filter(move => move.jumped);
+          }
+          // TODO multi-step moves due to jumping, kings
           return moves;
         }
       })();
