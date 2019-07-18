@@ -44,25 +44,21 @@
     <script>
       (function() {
         const rows = 8, cols = 8;
-        const interval = 100;
+        const interval = 1000;
         const board = [];
+        const depth = 5;
         let player = 'red';
         let movesWithoutChange = 0;
         reset();
         function nextTurn() {
-          const moves = validMoves(player); 
-          if (moves.length) {
+          const move = findBestMove(board, player, depth);
+          if (move.move) {
+            applyMove(board, player, move.move);
             movesWithoutChange = 0;
-            move = moves[Math.floor(Math.random() * moves.length)];
-            board[move.piece.x][move.piece.y] = null;
-            if (move.jumped) {
-              board[move.jumped.x][move.jumped.y] = null;
-            }
-            board[move.x][move.y] = player;
+            updateBoard();
           } else {
             movesWithoutChange++;
           }
-          updateBoard();
           if (player === 'red') {
             player = 'black';
           } else {
@@ -73,6 +69,40 @@
           } else {
             setTimeout(nextTurn, interval);
           }
+        }
+
+        // It's our turn.
+        // * Get list of valid moves
+        // * For each valid move...
+        //   * Find the score that will result after "depth" moves
+        // * Return the move with the best score, along with the best score.
+
+        function findBestMove(board, player, depth) {
+          const moves = validMoves(board, player); 
+          let best = false;
+          let bestMove;
+          if (!moves.length) {
+            return {
+              score: scoreBoard(board)
+            };
+          }
+          for (const move of moves) {
+            const b = cloneBoard(board);
+            applyMove(b, player, move);
+            let score;
+            if (depth) {
+              const otherMove = findBestMove(b, other(player), depth - 1);
+              // We want the worst outcome for the other player as a result of our best move
+              score = -otherMove.score;
+            } else {
+              score = scoreBoard(b, player);
+            }
+            if ((best === false) || (score > best)) {
+              best = score;
+              bestMove = move;
+            }
+          }
+          return { move: bestMove, score: best };
         }
         function reset() {
           initBoard();
@@ -114,7 +144,17 @@
             }
           }
         }
-        function validMoves(player) {
+        function applyMove(board, player, move) {
+          if (!move) {
+            return;
+          }
+          board[move.piece.x][move.piece.y] = null;
+          if (move.jumped) {
+            board[move.jumped.x][move.jumped.y] = null;
+          }
+          board[move.x][move.y] = player;
+        }
+        function validMoves(board, player) {
           const pieces = [];
           for (let y = 0; (y < rows); y++) {
             for (let x = 0; (x < cols); x++) {
@@ -160,6 +200,39 @@
           }
           // TODO multi-step moves due to jumping, kings
           return moves;
+        }
+        function scoreBoard(board, player) {
+          let score = 0;
+          for (let y = 0; (y < rows); y++) {
+            for (let x = 0; (x < cols); x++) {
+              const value = board[x][y];
+              if (value === null) {
+                // no effect
+              } else if (value === player) {
+                score++;
+              } else if (value !== player) {
+                score--;
+              }
+            }
+          }
+          return score;
+        }
+        function other(player) {
+          if (player === 'red') {
+            return 'black';
+          } else {
+            return 'red';
+          }
+        }
+        function cloneBoard(board) {
+          const clone = [];
+          for (let x = 0; (x < cols); x++) {
+            clone[x] = [];
+            for (let y = 0; (y < rows); y++) {
+              clone[x][y] = board[x][y];
+            }
+          }
+          return clone;
         }
       })();
     </script>
