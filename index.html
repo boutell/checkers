@@ -30,7 +30,7 @@
       }
       .king {
         border-radius: 14px;
-        box-shadow: 0 0 0 4px blue;
+        box-shadow: 0 0 0 4px gray;
       }
       .red {
         background-color: red;
@@ -48,32 +48,51 @@
     <script>
       (function() {
         const rows = 8, cols = 8;
-        const interval = 50;
+        const interval = 100;
         const board = [];
-        const depth = 5;
+        const depth = {
+          red: 6,
+          black: 2
+        };
         let player = 'red';
         let movesWithoutCapture = 0;
         reset();
         function nextTurn() {
-          const move = findBestMove(board, player, depth);
+          const move = findBestMove(board, player, depth[player]);
           movesWithoutCapture++;
           if (move.move) {
+//            printMove(move);
             if (move.move.jumped) {
               movesWithoutCapture = 0;
             }
             applyMove(board, player, move.move);
             updateBoard();
           }
-          if (player === 'red') {
-            player = 'black';
-          } else {
-            player = 'red';
+          if (scoreBoard(board, player) === 1000) {
+            setTimeout(reset, interval * 70);
+            return;
           }
-          if (movesWithoutCapture === 40) {
+          player = other(player);
+          if (movesWithoutCapture === 80) {
             movesWithoutCapture = 0;
             setTimeout(reset, interval * 70);
           } else {
             setTimeout(nextTurn, interval);
+          }
+        }
+
+        function printMove(move) {
+          console.log('MOVE WITH PREDICTED MOVES:');
+          let p = player;
+          while (move) {
+            const m = move.move;
+            if (!m) {
+              console.log(`${p} no valid move (${move.score})`);
+            } else {
+              console.log(`${p} ${m.piece.x} ${m.piece.y} -> ${m.x} ${m.y} (${move.score})`);
+            }
+            move = move.next;
+            p = other(p);
           }
         }
 
@@ -86,29 +105,39 @@
         function findBestMove(board, player, depth) {
           const moves = validMoves(board, player); 
           let best = false;
-          let bestMove;
+          let bestMoves = [];
           if (!moves.length) {
             return {
-              score: scoreBoard(board)
+              score: scoreBoard(board, player)
             };
           }
           for (const move of moves) {
             const b = cloneBoard(board);
             applyMove(b, player, move);
             let score;
+            let otherMove;
             if (depth) {
-              const otherMove = findBestMove(b, other(player), depth - 1);
+              otherMove = findBestMove(b, other(player), depth - 1);
               // We want the worst outcome for the other player as a result of our best move
               score = -otherMove.score;
             } else {
               score = scoreBoard(b, player);
             }
+            move.otherMove = otherMove;
+            move.board = b;
+            move.score = score;
             if ((best === false) || (score > best)) {
               best = score;
-              bestMove = move;
+              bestMoves = [ move ];
+            } else if (score === best) {
+              bestMoves.push(move);
             }
           }
-          return { move: bestMove, score: best };
+          const move = pick(bestMoves);
+          return { move, next: move.otherMove, score: best };
+        }
+        function pick(a) {
+          return a[Math.floor(Math.random() * a.length)];
         }
         function reset() {
           player = 'red';
@@ -173,7 +202,9 @@
           }
           board[move.piece.x][move.piece.y] = null;
           if (move.jumped) {
-            board[move.jumped.x][move.jumped.y] = null;
+            for (const jumped of move.jumped) {
+              board[jumped.x][jumped.y] = null;
+            }
           }
         }
         function validMoves(board, player) {
@@ -196,25 +227,57 @@
             }
             function test(deltas) {
               for (delta of deltas) {
-                const dx = delta[0];
-                const dy = delta[1];
-                const value = probe(dx, dy);
+                const nextX = piece.x + delta[0];
+                const nextY = piece.y + delta[1];
+                const value = probe(nextX, nextY);
                 if (value === false) {
                   // out of bounds
                 } else if (value === null) {
-                  moves.push({ piece, x: piece.x + dx, y: piece.y + dy });
+                  moves.push({ piece, x: nextX, y: nextY });
                 } else if (value.player !== player) {
-                  if (probe(dx * 2, dy * 2) === null) {
-                    moves.push({ piece, x: piece.x + dx * 2, y: piece.y + dy * 2, jumped: { x: piece.x + dx, y: piece.y + dy } });
+                  const newX = piece.x + delta[0] * 2;
+                  const newY = piece.y + delta[1] * 2;
+                  if (probe(newX, newY) === null) {
+                    const jumpMove = { piece, x: newX, y: newY, jumped: [ { x: nextX, y: nextY } ] };
+                    addExtraJumps(deltas, moves, jumpMove);
+                    moves.push(jumpMove);
                   }
                 }
               }
             }
-            function probe(dx, dy) {
-              if ((piece.x + dx >= 0) && (piece.y + dy >= 0) && (piece.x + dx < cols) && (piece.y + dy < rows)) {
-                return board[piece.x + dx][piece.y + dy];
+            function probe(x, y) {
+              if ((x >= 0) && (y >= 0) && (x < cols) && (y < rows)) {
+                return board[x][y];
               } else {
                 return false;
+              }
+            }
+            function addExtraJumps(deltas, moves, jumpMove) {
+              let firstSeen = false;
+              if ((jumpMove.x === rows - 1) || (jumpMove.y === 0)) {
+                // King me
+                deltas = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+              }
+              for (const delta of deltas) {
+                const nextX = jumpMove.x + delta[0];
+                const nextY = jumpMove.y + delta[1];
+                const newX = jumpMove.x + delta[0] * 2;
+                const newY = jumpMove.y + delta[1] * 2;
+                const value = probe(nextX, nextY);
+                if (!(value && (value.player === other(player)) && (probe(newX, newY) === null) && (!jumpMove.jumped.find(move => ((nextX === move.x) && (nextY === move.y)))))) {
+                  continue;
+                }
+                if (firstSeen) {
+                  jumpMove = cloneMove(jumpMove);
+                  moves.push(jumpMove);
+                } else {
+                  firstSeen = true;
+                }
+                jumpMove.jumped.push({ x: nextX, y: nextY });
+                jumpMove.x = newX;
+                jumpMove.y = newY;
+                // Triple jumps etc.
+                addExtraJumps(deltas, moves, jumpMove);
               }
             }
           }
@@ -222,25 +285,30 @@
           if (moves.find(move => move.jumped)) {
             return moves.filter(move => move.jumped);
           }
-          // TODO multi-step moves due to jumping, kings
           return moves;
         }
         function scoreBoard(board, player) {
-          let score = 0;
+          let mine = 0;
+          let theirs = 0;
           for (let y = 0; (y < rows); y++) {
             for (let x = 0; (x < cols); x++) {
               const value = board[x][y];
               if (value === null) {
                 // no effect
               } else if (value.player === player) {
-                score++;
+                mine++;
               } else {
-                score--;
+                theirs++;
               }
             }
           }
-          return score;
+          if (!theirs) {
+            return 1000;
+          } else {
+            return mine / theirs;
+          }
         }
+
         function other(player) {
           if (player === 'red') {
             return 'black';
